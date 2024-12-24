@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Round Robin Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #visualization {
+            margin: 20px 0;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative; /* Needed for absolute positioning of time */
+        }
+        
+         #time-indicator {
+           position: absolute;
+           top: 10px; /* Adjust as needed */
+           right: 10px; /* Adjust as needed */
+            font-weight: bold;
+            font-size: 16px;
+         }
+        
+        .process {
+            transition: all 0.3s ease;
+        }
+        
+        #statistics {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+         #statistics table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+          }
+          #statistics th, #statistics td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+          }
+          #statistics th {
+            background-color: #f2f2f2;
+        }
+        
+        #timeline {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        
+        .controls {
+            margin: 20px 0;
+             display: flex;
+            align-items: center;
+             margin-bottom: 10px;
+        }
+          .controls label {
+            margin-right: 10px;
+          }
+           .controls input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+             margin-right: 10px;
+           }
+        
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .queue-container {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Round Robin CPU Scheduling Visualization</h1>
+    
+    <div class="controls">
+      <label for="timeQuantum">Time Quantum:</label>
+        <input type="number" id="timeQuantum" value="3" min="1">
+      <button onclick="startSimulation()">Start Simulation</button>
+    </div>
+    
+    <div id="visualization">
+      <div id="time-indicator">Time: 0</div>
+        <svg width="800" height="400">
+            <!-- CPU -->
+            <rect x="350" y="150" width="100" height="100" fill="#ddd" stroke="black"/>
+            <text x="400" y="200" text-anchor="middle" dominant-baseline="middle">CPU</text>
+            
+            <!-- Queue area -->
+            <rect x="50" y="150" width="250" height="100" fill="none" stroke="#666" stroke-dasharray="5,5"/>
+            <text x="175" y="130" text-anchor="middle">Process Queue</text>
+        </svg>
+    </div>
+    
+    <div id="timeline">
+        <svg width="800" height="200">
+            <!-- Timeline will be drawn here -->
+        </svg>
+    </div>
+    
+    <div id="statistics"></div>
+
+    <script>
+        let simulationData = null;
+        let currentStep = 0;
+        let animationInterval = null;
+        
+        async function startSimulation() {
+             const timeQuantum = document.getElementById('timeQuantum').value;
+            const formData = new FormData();
+            formData.append('timeQuantum', timeQuantum);
+             const response = await fetch('/simulate', {
+                method: 'POST',
+                body: formData
+            });
+            simulationData = await response.json();
+            currentStep = 0;
+            
+            // Clear any existing animation
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            // Start animation
+            animationInterval = setInterval(updateVisualization, 1000);
+        }
+        
+        function updateVisualization() {
+            if (!simulationData || currentStep >= simulationData.history.length) {
+                clearInterval(animationInterval);
+                displayStatistics();
+                return;
+            }
+             const step = simulationData.history[currentStep];
+             document.getElementById('time-indicator').textContent = `Time: ${step.time}`;
+            
+            // Update SVG
+            const svg = document.querySelector('#visualization svg');
+            
+            // Clear previous processes
+            const processes = svg.querySelectorAll('.process');
+            processes.forEach(p => p.remove());
+            
+            // Draw running process
+            if (step.running) {
+                const runningProcess = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                runningProcess.setAttribute("cx", "400");
+                runningProcess.setAttribute("cy", "200");
+                runningProcess.setAttribute("r", "20");
+                runningProcess.setAttribute("fill", step.running.color);
+                runningProcess.setAttribute("class", "process");
+                svg.appendChild(runningProcess);
+                
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", "400");
+                text.setAttribute("y", "200");
+                text.setAttribute("text-anchor", "middle");
+                text.setAttribute("dominant-baseline", "middle");
+                text.setAttribute("fill", "white");
+                text.textContent = `P${step.running.pid}`;
+                svg.appendChild(text);
+            }
+            
+            // Draw queue
+            step.queue.forEach((process, index) => {
+                const queueProcess = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                queueProcess.setAttribute("cx", String(100 + index * 50));
+                queueProcess.setAttribute("cy", "200");
+                queueProcess.setAttribute("r", "20");
+                queueProcess.setAttribute("fill", process.color);
+                queueProcess.setAttribute("class", "process");
+                svg.appendChild(queueProcess);
+                
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", String(100 + index * 50));
+                text.setAttribute("y", "200");
+                text.setAttribute("text-anchor", "middle");
+                text.setAttribute("dominant-baseline", "middle");
+                text.setAttribute("fill", "white");
+                text.textContent = `P${process.pid}`;
+                svg.appendChild(text);
+            });
+            
+            updateTimeline();
+            currentStep++;
+        }
+        
+        function updateTimeline() {
+            const svg = document.querySelector('#timeline svg');
+            svg.innerHTML = '';
+            
+            // Draw timeline
+            const timelineY = 100;
+            const timelineStart = 50;
+            const timelineWidth = 700;
+            
+            // Base timeline
+            const timeline = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            timeline.setAttribute("x1", String(timelineStart));
+            timeline.setAttribute("y1", String(timelineY));
+            timeline.setAttribute("x2", String(timelineStart + timelineWidth));
+            timeline.setAttribute("y2", String(timelineY));
+            timeline.setAttribute("stroke", "black");
+            svg.appendChild(timeline);
+            
+            // Draw process executions
+            const timeUnit = timelineWidth / simulationData.history.length;
+            for (let i = 0; i <= currentStep; i++) {
+                const step = simulationData.history[i];
+                if (step.running) {
+                    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                    rect.setAttribute("x", String(timelineStart + i * timeUnit));
+                    rect.setAttribute("y", String(timelineY - 20));
+                    rect.setAttribute("width", String(timeUnit));
+                    rect.setAttribute("height", "40");
+                    rect.setAttribute("fill", step.running.color);
+                    svg.appendChild(rect);
+                    
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("x", String(timelineStart + i * timeUnit + timeUnit/2));
+                    text.setAttribute("y", String(timelineY));
+                    text.setAttribute("text-anchor", "middle");
+                    text.setAttribute("dominant-baseline", "middle");
+                    text.setAttribute("fill", "white");
+                    text.textContent = `P${step.running.pid}`;
+                    svg.appendChild(text);
+                }
+            }
+        }
+        
+         function displayStatistics() {
+            const stats = simulationData.statistics;
+            const statsDiv = document.getElementById('statistics');
+            let tableHTML = `
+                <h2>Statistics</h2>
+                 <p>Average Waiting Time: ${stats.average_waiting_time}</p>
+                 <p>Average Turnaround Time: ${stats.average_turnaround_time}</p>
+                 <p>Completion Order: ${stats.completion_order.map(pid => 'P'+pid).join(' → ')}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Process ID</th>
+                            <th>Waiting Time</th>
+                            <th>Turnaround Time</th>
+                             <th>Completion Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            stats.process_details.forEach(process => {
+              tableHTML += `
+                    <tr>
+                        <td>P${process.pid}</td>
+                        <td>${process.waiting_time}</td>
+                        <td>${process.turnaround_time}</td>
+                         <td>${process.completion_time}</td>
+                    </tr>
+               `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            statsDiv.innerHTML = tableHTML;
+          }
+
+    </script>
+</body>
+</html>
